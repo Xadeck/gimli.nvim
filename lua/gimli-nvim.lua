@@ -21,7 +21,7 @@ M.run = function()
     return
   end
   -- find the project root, and a bazel-produced file.
-  local workspace = vim.fs.root(0, { ".git", "MODULE.bzl" })
+  local workspace = vim.fs.root(0, { ".git", "MODULE.bzl", "WORKSPACE" })
   local path = workspace .. '/.build_event.json'
   if vim.fn.filereadable(path) == 0 then
     vim.notify("No .build_event.json file", vim.log.levels.WARN)
@@ -48,7 +48,7 @@ M.run = function()
       }
       goto continue
     end
-    if item and line:find('^1 error generated.$') then
+    if item and match then
       items = items or {}
       table.insert(items, item)
       item = nil
