@@ -59,9 +59,13 @@ M.run = function()
     end
     ::continue::
   end
-  -- set the quickfix list and open it.
+  -- set the quickfix list and open it if not empty.
   vim.fn.setqflist({}, 'r', { items = items, title = 'bazel errors ' .. workspace })
-  vim.cmd("copen")
+  if items then
+    vim.cmd("copen")
+  else
+    vim.notify("No build errors found.")
+  end
 end
 
 return M
