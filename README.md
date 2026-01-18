@@ -13,8 +13,7 @@ Requirements
 Add the following to your `.bazelrc`:
 
 ```
-build  --build_event_json_file=.build_event.json
-test   --build_event_json_file=.build_event.json
+common --build_event_json_file=.build_event.json
 ```
 
 This instructs Bazel - when compiling or running tests - to publish build events to a `.build_events.json` file at the top of the Bazel workspace. The build events contains the output of compilation command, from which errors can be found. You probably want to add this file to your `.gitignore` if your workspace is version-controlled.
