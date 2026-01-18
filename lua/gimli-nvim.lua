@@ -22,6 +22,10 @@ M.run = function()
   end
   -- find the project root, and a bazel-produced file.
   local workspace = vim.fs.root(0, { ".git", "MODULE.bzl", "WORKSPACE" })
+  if not workspace then
+    vim.notify("No workspace found", vim.log.levels.WARN)
+    return
+  end
   local path = workspace .. '/.build_event.json'
   if vim.fn.filereadable(path) == 0 then
     vim.notify("No .build_event.json file", vim.log.levels.WARN)
