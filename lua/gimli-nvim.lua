@@ -39,23 +39,18 @@ M.run = function()
   local items
   local item
   for _, line in ipairs(lines) do
-    local match, _, filename, lnum, col, message = line:find('^([^:]+):(%d+):(%d+): (.+)$')
-    if not item and match then
-      item = {
-        filename = workspace .. '/' .. filename,
-        module = filename,
-        lnum = tonumber(lnum),
-        col = tonumber(col),
-        type = 'E',
-        text = message,
-        context = {}
-      }
-      goto continue
-    end
-    if item and match then
+    local match, _, filename, lnum, col, message = line:find('^([^:]+):(%d+):(%d+): error: (.+)$')
+    if match then
       items = items or {}
+      item = {}
       table.insert(items, item)
-      item = nil
+      item.filename = workspace .. '/' .. filename
+      item.module = filename
+      item.lnum = tonumber(lnum)
+      item.col = tonumber(col)
+      item.type = 'E'
+      item.text = message
+      item.context = {}
       goto continue
     end
     if item then
