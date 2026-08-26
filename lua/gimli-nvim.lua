@@ -62,6 +62,7 @@ M.run = function()
   vim.fn.setqflist({}, 'r', { items = items, title = 'bazel errors ' .. workspace })
   if items then
     vim.cmd("copen")
+    vim.cmd("cfirst")
   else
     vim.notify("No build errors found.")
   end

@@ -42,4 +42,4 @@ For a more thorough configuration involving lazy-loading, see [Lazy loading with
 Usage
 -----
 
-In Neovim, just run the `:Gimli` command. This will replace the quickfix list with errors found from the latest Bazel build events. This will also open the quickfix window.
+In Neovim, just run the `:Gimli` command. This will replace the quickfix list with errors found from the latest Bazel build events, open the quickfix window, and jump to the first error.
