@@ -86,7 +86,9 @@ M.run = function()
         col = tonumber(col),
         type = 'E',
         text = msg,
-        context = {},
+        user_data = {
+          details = { line },
+        },
       }
       table.insert(items, item)
     else
@@ -105,7 +107,10 @@ M.run = function()
           col = 1,
           type = 'E',
           text = text,
-          context = {},
+          user_data = {
+            details = { line },
+            test = current_test,
+          },
         }
         table.insert(items, item)
       else
@@ -120,11 +125,24 @@ M.run = function()
             col = 1,
             type = 'E',
             text = check_msg,
-            context = {},
+            user_data = {
+              details = { line },
+            },
           }
           table.insert(items, item)
-        elseif item then
-          table.insert(item.context, line)
+        elseif item and item.user_data and item.user_data.details then
+          table.insert(item.user_data.details, line)
+        end
+      end
+    end
+  end
+
+  -- trim trailing blank lines from details
+  if items then
+    for _, it in ipairs(items) do
+      if it.user_data and it.user_data.details then
+        while #it.user_data.details > 0 and it.user_data.details[#it.user_data.details]:match '^%s*$' do
+          table.remove(it.user_data.details)
         end
       end
     end
@@ -138,6 +156,107 @@ M.run = function()
   else
     vim.notify 'No build or test errors found.'
   end
+end
+
+M._detail_win = nil
+
+--- Show full error details in a floating window
+M.show_detail = function()
+  if M._detail_win and vim.api.nvim_win_is_valid(M._detail_win) then
+    vim.api.nvim_win_close(M._detail_win, true)
+    M._detail_win = nil
+    return
+  end
+
+  local is_qf = vim.bo.buftype == 'quickfix'
+  local qf = vim.fn.getqflist { items = 1, idx = 0 }
+  if not qf.items or #qf.items == 0 then
+    vim.notify('Quickfix list is empty', vim.log.levels.WARN)
+    return
+  end
+
+  local item
+  if is_qf then
+    local cur_line = vim.fn.line '.'
+    item = qf.items[cur_line]
+  else
+    -- In source buffer: find item matching current file & line, else fallback to current qf index
+    local cur_buf = vim.api.nvim_get_current_buf()
+    local cur_file = vim.api.nvim_buf_get_name(cur_buf)
+    local cur_line = vim.fn.line '.'
+    for _, it in ipairs(qf.items) do
+      if (it.bufnr == cur_buf or it.filename == cur_file) and it.lnum == cur_line then
+        item = it
+        break
+      end
+    end
+    if not item and qf.idx > 0 then item = qf.items[qf.idx] end
+  end
+
+  if not item or not item.user_data or not item.user_data.details or #item.user_data.details == 0 then
+    vim.notify('No extra details for this item', vim.log.levels.INFO)
+    return
+  end
+
+  local lines = item.user_data.details
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].buftype = 'nofile'
+  vim.bo[buf].bufhidden = 'wipe'
+
+  -- Apply syntax/diagnostic highlights
+  vim.api.nvim_buf_call(buf, function()
+    vim.fn.matchadd('diffAdded', '^%s*added:.*')
+    vim.fn.matchadd('diffRemoved', '^%s*deleted:.*')
+    vim.fn.matchadd('DiagnosticWarn', '^%s*Expected:.*')
+    vim.fn.matchadd('DiagnosticInfo', '^%s*Value of:.*')
+    vim.fn.matchadd('DiagnosticError', 'Failure')
+  end)
+
+  local max_width = math.floor(vim.o.columns * 0.85)
+  local max_height = math.floor(vim.o.lines * 0.8)
+
+  local longest_line = 0
+  for _, l in ipairs(lines) do
+    longest_line = math.max(longest_line, vim.fn.strdisplaywidth(l))
+  end
+
+  local width = math.min(max_width, math.max(50, longest_line))
+  local height = math.min(max_height, math.max(1, #lines))
+  local row = math.floor((vim.o.lines - height) / 2)
+  local col = math.floor((vim.o.columns - width) / 2)
+
+  local title = ' ' .. (item.user_data.test or item.text or 'Error Detail') .. ' '
+
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = 'editor',
+    row = row,
+    col = col,
+    width = width,
+    height = height,
+    border = 'rounded',
+    title = title,
+    title_pos = 'center',
+    style = 'minimal',
+  })
+  M._detail_win = win
+
+  local close = function()
+    if M._detail_win and vim.api.nvim_win_is_valid(M._detail_win) then
+      vim.api.nvim_win_close(M._detail_win, true)
+      M._detail_win = nil
+    end
+  end
+
+  vim.keymap.set('n', 'q', close, { buffer = buf, nowait = true, silent = true })
+  vim.keymap.set('n', '<Esc>', close, { buffer = buf, nowait = true, silent = true })
+
+  vim.api.nvim_create_autocmd('BufLeave', {
+    buffer = buf,
+    once = true,
+    callback = close,
+  })
 end
 
 return M
