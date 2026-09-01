@@ -81,7 +81,6 @@ M.run = function()
       items = items or {}
       item = {
         filename = f:sub(1, 1) == '/' and f or (workspace .. '/' .. f),
-        module = f,
         lnum = tonumber(lnum),
         col = tonumber(col),
         type = 'E',
@@ -102,7 +101,6 @@ M.run = function()
         if fail_msg ~= '' then text = text .. ': ' .. fail_msg end
         item = {
           filename = f_fail:sub(1, 1) == '/' and f_fail or (workspace .. '/' .. f_fail),
-          module = f_fail,
           lnum = tonumber(l_fail),
           col = 1,
           type = 'E',
@@ -120,7 +118,6 @@ M.run = function()
           items = items or {}
           item = {
             filename = f_fatal:sub(1, 1) == '/' and f_fatal or (workspace .. '/' .. f_fatal),
-            module = f_fatal,
             lnum = tonumber(l_fatal),
             col = 1,
             type = 'E',
