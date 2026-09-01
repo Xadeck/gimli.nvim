@@ -95,8 +95,7 @@ M.run = function()
       local f_fail, l_fail, fail_msg = line:match '^(%S+):(%d+):%s*Failure%s*(.*)$'
       if f_fail then
         items = items or {}
-        local text = 'Failure'
-        if current_test then text = text .. ' in ' .. current_test end
+        local text = current_test and ('🛠️ ' .. current_test) or '🛠️ Failure'
         fail_msg = fail_msg:gsub('^:%s*', '')
         if fail_msg ~= '' then text = text .. ': ' .. fail_msg end
         item = {
