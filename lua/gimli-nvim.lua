@@ -103,8 +103,8 @@ M.run = function()
     end
 
     -- 1. Compiler error: filename:lnum:col: [fatal ]error: message
-    local f, lnum, col, err_type, msg = line:match '^([^:]+):(%d+):(%d+):%s*(.-error):%s*(.+)$'
-    if f then
+    local f, lnum, col, _, msg = line:match '^([^:]+):(%d+):(%d+):%s*(.-error):%s*(.+)$'
+    if f and not f:match '^ERROR$' then
       items = items or {}
       item = {
         filename = f:sub(1, 1) == '/' and f or (workspace .. '/' .. f),
@@ -118,43 +118,82 @@ M.run = function()
       }
       table.insert(items, item)
     else
-      -- 2. GUnit / Google Test failure: filename:lnum: Failure
-      local f_fail, l_fail, fail_msg = line:match '^(%S+):(%d+):%s*Failure%s*(.*)$'
-      if f_fail then
-        items = items or {}
-        local text = current_test and ('🛠️ ' .. current_test) or '🛠️ Failure'
-        fail_msg = fail_msg:gsub('^:%s*', '')
-        if fail_msg ~= '' then text = text .. ': ' .. fail_msg end
-        item = {
-          filename = f_fail:sub(1, 1) == '/' and f_fail or (workspace .. '/' .. f_fail),
-          lnum = tonumber(l_fail),
-          col = 1,
-          type = 'E',
-          text = text,
-          user_data = {
-            details = { line },
-            test = current_test,
-          },
-        }
-        table.insert(items, item)
-      else
-        -- 3. Fatal logging / CHECK failures: Fmmdd hh:mm:ss.uuuuuu pid file:line] Check failed: ...
-        local f_fatal, l_fatal, check_msg = line:match '^F%d%d%d%d %d%d:%d%d:%d%d%.%d+%s+%d+%s+([^:]+):(%d+)%]%s*(.+)$'
-        if f_fatal then
+      -- 2. Bazel ERROR: <path>:<lnum>:<col>: <message>
+      local bzl_f, bzl_lnum, bzl_col, bzl_msg = line:match '^ERROR:%s+([^:]+):(%d+):(%d+):%s*(.+)$'
+      if bzl_f then
+        if bzl_msg:match '^Compiling .* failed:' or bzl_msg:match '^Analysis of target .* failed' then
+          item = nil
+        else
           items = items or {}
           item = {
-            filename = f_fatal:sub(1, 1) == '/' and f_fatal or (workspace .. '/' .. f_fatal),
-            lnum = tonumber(l_fatal),
-            col = 1,
+            filename = bzl_f:sub(1, 1) == '/' and bzl_f or (workspace .. '/' .. bzl_f),
+            lnum = tonumber(bzl_lnum),
+            col = tonumber(bzl_col),
             type = 'E',
-            text = check_msg,
+            text = bzl_msg,
             user_data = {
               details = { line },
             },
           }
           table.insert(items, item)
-        elseif item and item.user_data and item.user_data.details then
-          table.insert(item.user_data.details, line)
+        end
+      else
+        -- 3. GUnit / Google Test failure: filename:lnum: Failure
+        local f_fail, l_fail, fail_msg = line:match '^(%S+):(%d+):%s*Failure%s*(.*)$'
+        if f_fail then
+          items = items or {}
+          local text = current_test and ('🛠️ ' .. current_test) or '🛠️ Failure'
+          fail_msg = fail_msg:gsub('^:%s*', '')
+          if fail_msg ~= '' then text = text .. ': ' .. fail_msg end
+          item = {
+            filename = f_fail:sub(1, 1) == '/' and f_fail or (workspace .. '/' .. f_fail),
+            lnum = tonumber(l_fail),
+            col = 1,
+            type = 'E',
+            text = text,
+            user_data = {
+              details = { line },
+              test = current_test,
+            },
+          }
+          table.insert(items, item)
+        else
+          -- 4. Fatal logging / CHECK failures: Fmmdd hh:mm:ss.uuuuuu pid file:line] Check failed: ...
+          local f_fatal, l_fatal, check_msg =
+            line:match '^F%d%d%d%d %d%d:%d%d:%d%d%.%d+%s+%d+%s+([^:]+):(%d+)%]%s*(.+)$'
+          if f_fatal then
+            items = items or {}
+            item = {
+              filename = f_fatal:sub(1, 1) == '/' and f_fatal or (workspace .. '/' .. f_fatal),
+              lnum = tonumber(l_fatal),
+              col = 1,
+              type = 'E',
+              text = check_msg,
+              user_data = {
+                details = { line },
+              },
+            }
+            table.insert(items, item)
+          elseif item and item.user_data and item.user_data.details then
+            table.insert(item.user_data.details, line)
+            local pkg, name = line:match '^target \'//([^:]*):([^\']+)\' is not visible from'
+            if pkg and name then
+              local caller_pkg = item.text:match 'rule (//[^:]+):'
+              if caller_pkg then
+                local vis = string.format('"%s:__pkg__",', caller_pkg)
+                pcall(vim.fn.setreg, '"', vis)
+                pcall(vim.fn.setreg, '+', vis)
+              end
+              item.text = string.format('🔒 Visibility error: //%s:%s is not visible', pkg, name)
+              table.insert(items, {
+                filename = workspace .. '/' .. (pkg ~= '' and (pkg .. '/') or '') .. 'BUILD',
+                pattern = string.format([[name\s*=\s*"%s"]], name),
+                type = 'W',
+                text = '🔓 Open visibility of :' .. name,
+                user_data = item.user_data,
+              })
+            end
+          end
         end
       end
     end
@@ -234,7 +273,10 @@ M.show_detail = function()
     vim.fn.matchadd('diffRemoved', '^%s*deleted:.*')
     vim.fn.matchadd('DiagnosticWarn', '^%s*Expected:.*')
     vim.fn.matchadd('DiagnosticInfo', '^%s*Value of:.*')
+    vim.fn.matchadd('DiagnosticInfo', '^%s*Recommendation:.*')
     vim.fn.matchadd('DiagnosticError', 'Failure')
+    vim.fn.matchadd('DiagnosticError', 'ERROR:')
+    vim.fn.matchadd('DiagnosticError', 'Visibility error:')
   end)
 
   local max_width = math.floor(vim.o.columns * 0.85)
