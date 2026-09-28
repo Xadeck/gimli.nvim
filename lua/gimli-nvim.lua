@@ -79,13 +79,26 @@ M.run = function()
   local current_test
 
   for _, line in ipairs(lines) do
-    -- Track test boundaries to associate failure with the running test
+    -- Track test boundaries and Bazel status lines to close active detail blocks
     local test_start = line:match '^%[%s*RUN%s*%]%s+(%S+)'
     if test_start then
       current_test = test_start
       item = nil
-    elseif line:match '^%[%s*(.-)%s*%]' then
-      -- [ FAILED ], [ PASSED ], [ OK ], etc. mark the end of the test's failure output
+    elseif
+      line:match '^%[%s*(.-)%s*%]'
+      or line:match '^INFO:%s'
+      or line:match '^WARNING:%s'
+      or line:match '^DEBUG:%s'
+      or line:match '^Analyzing:%s'
+      or line:match '^Loading:%s'
+      or line:match '^FAILED:'
+      or line:match '^Target //.* failed to build'
+      or line:match '^Target //.* up%-to%-date'
+      or line:match '^Use %-%-verbose_failures'
+      or line:match '^Use %-%-sandbox_debug'
+      or line:match '^ERROR:%s+Analysis of '
+      or line:match '^ERROR:%s+Build did NOT complete'
+    then
       item = nil
     end
 
