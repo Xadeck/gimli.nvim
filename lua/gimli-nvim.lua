@@ -11,6 +11,22 @@ M.config = config
 ---@param args Config?
 M.setup = function(args) M.config = vim.tbl_deep_extend('force', M.config, args or {}) end
 
+local function clean_chunks(chunks)
+  local raw = table.concat(chunks)
+  local out = {}
+  for _, raw_line in ipairs(vim.split(raw, '\n', { plain = true })) do
+    -- Each \x1b[1A\x1b[K erases the previous line (Bazel --curses status bar)
+    local _, erase_count = raw_line:gsub('\x1b%[1A\x1b%[K', '')
+    for _ = 1, erase_count do
+      table.remove(out)
+    end
+    local clean = raw_line:gsub('\x1b%[[0-9;?]*[ -/]*[@-~]', '')
+    clean = clean:gsub('^.*\r(.)', '%1'):gsub('\r', '')
+    table.insert(out, clean)
+  end
+  return out
+end
+
 M.run = function()
   -- find the project root, and a bazel-produced file.
   local workspace = vim.fs.root(0, { '.git', 'MODULE.bzl', 'WORKSPACE' })
@@ -45,20 +61,18 @@ M.run = function()
       local ok, event = pcall(vim.json.decode, line)
       if ok and type(event) == 'table' and event.id and event.id.progress and event.progress then
         if type(event.progress.stderr) == 'string' and event.progress.stderr ~= '' then
-          local clean = (event.progress.stderr:gsub('\x1b%[[0-9;?]*[ -/]*[@-~]', ''))
-          table.insert(stderr_chunks, clean)
+          table.insert(stderr_chunks, event.progress.stderr)
         end
         if type(event.progress.stdout) == 'string' and event.progress.stdout ~= '' then
-          local clean = (event.progress.stdout:gsub('\x1b%[[0-9;?]*[ -/]*[@-~]', ''))
-          table.insert(stdout_chunks, clean)
+          table.insert(stdout_chunks, event.progress.stdout)
         end
       end
     end
   end
   file:close()
 
-  local full_output = table.concat(stderr_chunks) .. '\n' .. table.concat(stdout_chunks)
-  local lines = vim.split(full_output, '\n', { plain = true })
+  local lines = clean_chunks(stderr_chunks)
+  vim.list_extend(lines, clean_chunks(stdout_chunks))
 
   local items
   local item
