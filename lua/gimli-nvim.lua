@@ -102,8 +102,11 @@ M.run = function()
       item = nil
     end
 
-    -- 1. Compiler error: filename:lnum:col: [fatal ]error: message
+    -- 1. Compiler / protoc error: filename:lnum:col: [fatal ]error: message
     local f, lnum, col, _, msg = line:match '^([^:]+):(%d+):(%d+):%s*(.-error):%s*(.+)$'
+    if not f then
+      f, lnum, col, msg = line:match '^([^:]+%.proto):(%d+):(%d+):%s*(.+)$'
+    end
     if f and not f:match '^ERROR$' then
       items = items or {}
       item = {
@@ -121,7 +124,7 @@ M.run = function()
       -- 2. Bazel ERROR: <path>:<lnum>:<col>: <message>
       local bzl_f, bzl_lnum, bzl_col, bzl_msg = line:match '^ERROR:%s+([^:]+):(%d+):(%d+):%s*(.+)$'
       if bzl_f then
-        if bzl_msg:match '^Compiling .* failed:' or bzl_msg:match '^Analysis of target .* failed' then
+        if bzl_msg:match 'failed: %(Exit %d+%)' or bzl_msg:match '^Analysis of target .* failed' then
           item = nil
         else
           items = items or {}
